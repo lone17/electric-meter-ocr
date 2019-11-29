@@ -22,7 +22,7 @@ labels = json.load(open('image_cropped_json.json', 'r'))['_via_img_metadata']
 labels = {k.split('.')[0]: v['file_attributes']['label'] for k, v in labels.items()}
 img_paths = paths.list_images('image_cropped')
 imgs = {os.path.basename(p).split('.')[0]: cv2.imread(p) for p in img_paths}
-for k in labels.keys():
+for k in imgs.keys():
     test_data.append((imgs[k], labels[k]))
 
 labels = json.load(open('new_images_json.json', 'r'))['_via_img_metadata']
@@ -66,7 +66,8 @@ for img_path in paths.list_images(r'SCUT-WMN Dataset/easy_samples'):
 X_test = []
 y_test = []
 for item in test_data:
-    x = resize_to_prefered_height(item[0], img_h)
+    # x = resize_to_prefered_height(item[0], img_h)
+    x = item[0]
     label = [int(c) for c in item[1]]
     # y_onehot = enc.transform(label)
     X_test.append(x)

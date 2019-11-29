@@ -154,6 +154,8 @@ def global_hist_equalize(img):
     
     return img
 
+bilateral_blur = cv2.bilateralFilter
+
 if __name__ == '__main__':
     img_paths = list(paths.list_images('image_cropped'))
     # img_paths = [
@@ -167,16 +169,17 @@ if __name__ == '__main__':
                  # [increase_contrast, 'increase contrast'],
                  # [defog, 'defog'],
                  # [denoise, 'denoise'],
-                 [white_balance, 'white balance'],
-                 [denoise_cv, 'fast n1 mean denoise'],
+                 # [white_balance, 'white balance'],
+                 # [denoise_cv, 'fast n1 mean denoise'],
+                 [bilateral_blur, 'bilateral blur'],
                  [sharpen, 'sharpen'],
-                 [denoise, 'denoise'],
-                 [thresh, 'thresh'],
+                 # [denoise, 'denoise'],
+                 # [thresh, 'thresh'],
                  # [partial(gamma_correct, gamma=2.5), 'gamma'],
                  # [partial(auto_gamma, clip=0.2), 'auto gamma'],
                  # [channel_min, 'min channel-wise'],
-                 [partial(clahe, clipLimit=3.0, tileGridSize=(17, 17)), 'clahe'],
-                 [global_hist_equalize, 'global hist equalize']
+                 # [partial(clahe, clipLimit=3.0, tileGridSize=(17, 17)), 'clahe'],
+                 # [global_hist_equalize, 'global hist equalize']
     ]
 
     row, col = 4, 3
@@ -190,7 +193,8 @@ if __name__ == '__main__':
         plt.imshow(img)
 
         for i, (op, title) in enumerate(operators):
-            img = op(origin_img.copy())
+            # img = op(origin_img.copy())
+            img = op(img)
             plt.subplot(row, col, i+2, title=title)
             plt.imshow(img)
             
