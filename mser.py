@@ -230,7 +230,7 @@ def filt_boxes(boxes, image):
         # too small
         if image_w / w > 15:
             continue
-        if image_h / h < 0.2:
+        if image_h / h > 5:
             continue
         if image_area / (w * h) > 32:
             continue
@@ -414,9 +414,9 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         preds = probs.argmax(axis=-1)
 
         red_blob = get_red_blob_bounding_box(origin_img.copy())
-        mean_w = np.mean([w for x, y, w, h in boxes] + [red_blob[2]])
-        right_most = max(x + mean_w / 2, 0.8 * origin_img.shape[1])
-        left_most = np.min([w for x, y, w, h in boxes]) - mean_w / 4
+        mean_w = np.mean([w for x, y, w, h in boxes])
+        right_most = max(red_blob[0] - mean_w / 2, 0.8 * origin_img.shape[1])
+        left_most = min(mean_w / 2, min([x for x, y, w, h in boxes]) - mean_w / 4)
         width = right_most - left_most + 1
         # keep = []
         # for i, (x, y, w, h) in enumerate(boxes):
@@ -434,9 +434,9 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
                 prediction[section_idx] = preds[i]
                 section_area[section_idx] = w * h
         
-        if prediction[0] in [6, 8]:
+        if prediction[0] in [6, 8, 9]:
             prediction[0] = 0
-        if prediction[1] in [6, 8]:
+        if prediction[1] in [6, 8, 9]:
             prediction[1] = 0
             
         prediction = ''.join([str(i) for i in prediction])
@@ -459,16 +459,16 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
             plt.subplot('411')
             plt.imshow(origin_img)
             plt.title(label + ' => ' + prediction)
-        
-        loss.append(distance(prediction, label) / max(len(prediction), len(label)))
     else:
-        loss.append(1)
+        prediction = '00555'
+    
+    loss.append(distance(prediction, label) / max(len(prediction), len(label)))
     
     print(label + ' => ' + prediction)
     
     if plot_debug:
         # cv2.imshow('', display_img)
-        plt.savefig('debug_images/' + file_list[img_idx])
-        plt.show()
+        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
+        # plt.show()
     
 print(np.mean(loss))
