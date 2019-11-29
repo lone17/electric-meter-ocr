@@ -166,12 +166,12 @@ def get_cropped_images(regions, image, target_size=(32, 32), trim=False, plot_de
     return np.array(region_images), regions
     
 def get_region_candidates(img):
-    # img = clahe(img, clipLimit=2.0, tileGridSize=(31, 31))
+    gray = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
     # # img = global_hist_equalize(img)
     # # img = thresh(img)
     # plt.subplot('411')
     # plt.imshow(img)
-    gray = convert_to_gray(img)
+    # gray = convert_to_gray(img)
     
     mser = cv2.MSER_create(_delta=1)
     regions, _ = mser.detectRegions(gray)
@@ -338,7 +338,7 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
 
     rotate_angle = get_rotate_angle(img, max_degree=10)
     
-    img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
+    # img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
     img = imutils.rotate(img, rotate_angle)
     origin_img = imutils.rotate(origin_img, rotate_angle)
     # img = img[:, :int(0.8 * img.shape[1])]
@@ -468,7 +468,7 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     
     if plot_debug:
         # cv2.imshow('', display_img)
-        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
+        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
         # plt.show()
     
 print(np.mean(loss))
