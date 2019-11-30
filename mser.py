@@ -318,7 +318,7 @@ rcn_model = get_classifier_model(num_classes=10, num_filters=32, dense_unit=512)
 rcn_model.load_weights('recognizer_weights_32_512.h5')
 
 plt.rcParams["figure.figsize"] = [9, 9]
-loss = []
+loss, acc = [], []
 plot_debug = True
 # for img_path in list(paths.list_images(r'D:\Google Drive\image processing\image_cropped'))[:]:
 #     origin_img = cv2.imread(img_path) 
@@ -357,11 +357,11 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     processed_images = preprocess_images(region_images, mode='clf')
     probs = clf_model.predict_proba(processed_images, verbose=0)[:, 1]
     
-    # for i, (_, _, w, h) in enumerate(boxes):
-    #     # if h / w > 1.6 and h / w < 1.7:
-    #     #     probs[i] += 0.1
-    #     if h / w >= 1.75:
-    #         probs[i] -= 0.1
+    for i, (_, _, w, h) in enumerate(boxes):
+        # if h / w > 1.6 and h / w < 1.7:
+        #     probs[i] += 0.1
+        if h / w >= 1.75:
+            probs[i] -= 0.1
 
     mask = probs > 0.5
     boxes = boxes[mask]
@@ -448,12 +448,14 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         prediction = '00555'
     
     loss.append(distance(prediction, label) / max(len(prediction), len(label)))
+    acc.append(prediction == label)
     
     print(label + ' => ' + prediction)
     
-    # if plot_debug:
+    if plot_debug:
         # cv2.imshow('', display_img)
-        # plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
+        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
         # plt.show()
     
 print(np.mean(loss))
+print(np.mean(acc))
