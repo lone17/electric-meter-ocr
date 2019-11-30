@@ -106,13 +106,6 @@ def merge_boxes(boxes, probs, iou_threshold=0.2):
                 keep_going = True
             else:
                 new_x, new_y, new_w, new_h = boxes[highest_prob_idx]
-
-            # if new_h / new_w > 1.3:
-            #     new_x -= 5
-            #     new_w += 10
-            # if new_h / new_w > 1.5:
-            #     new_x -= 5
-            #     new_w += 10
             
             new_boxes.append(np.array([new_x, new_y, new_w, new_h]))
             new_probs.append(np.mean(probs[origin_indices]))
@@ -183,9 +176,11 @@ def get_region_candidates(img):
 def preprocess_images(images, mode):
     if mode == 'clf':
         mean = 107.524
+        # mean = 103.93412087377622
         images = np.array([convert_to_gray(img) for img in images], dtype='float')
     elif mode == 'rcn':
-        mean = 112.833
+        # mean = 112.833
+        mean = 115.2230361178299
         # images = np.array([global_hist_equalize(img) for img in images], dtype='float')
         images = np.array([convert_to_gray(img) for img in images], dtype='float')
     
@@ -315,12 +310,12 @@ def get_red_blob_bounding_box(img, plot_debug=False):
     
     return (x, y, w, h)
 
-clf_model = get_classifier_model(num_classes=2, num_filters=32)
+clf_model = get_classifier_model(num_classes=2, num_filters=32, dense_unit=1024)
 clf_model.load_weights('clf_weights.h5')
-# clf_model = load_model('detector_model.hdf5')
+# clf_model.load_weights('classifier_weights_32_512.h5')
 
-rcn_model = get_classifier_model(num_classes=10, num_filters=64)
-rcn_model.load_weights('rcn_weights.h5')
+rcn_model = get_classifier_model(num_classes=10, num_filters=32, dense_unit=512)
+rcn_model.load_weights('recognizer_weights_32_512.h5')
 
 plt.rcParams["figure.figsize"] = [9, 9]
 loss = []
@@ -344,11 +339,6 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     # img = img[:, :int(0.8 * img.shape[1])]
     # origin_img = origin_img[:, :int(0.8 * origin_img.shape[1])]
     
-    # img = global_hist_equalize(img)
-    # img = thresh(img)
-    # plt.subplot('411')
-    # plt.imshow(img)
-
     processed_img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
     boxes = get_region_candidates(processed_img)
     boxes = filt_boxes(boxes, img)
@@ -362,7 +352,7 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
 
     # print(img.shape)
     # print(global_hist_equalize(img).shape)
-    region_images, regions = get_cropped_images(boxes, img, trim=False)
+    region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
 
     processed_images = preprocess_images(region_images, mode='clf')
     probs = clf_model.predict_proba(processed_images, verbose=0)[:, 1]
@@ -379,9 +369,9 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     probs = probs[mask]
     
     if plot_debug:
-        display_img = origin_img.copy()
+        display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
         for i, (x, y, w, h) in enumerate(boxes):
-            display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
+            display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
             cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
             cv2.putText(display_img, str(probs[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
         plt.subplot('413')
@@ -401,8 +391,8 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     # boxes = filt_boxes(boxes, img)
     sort_indices = np.argsort(boxes[:, 0])
     boxes = np.array([boxes[i] for i in sort_indices])
-    region_images = np.array([region_images[i] for i in sort_indices])
-    # region_images, regions = get_cropped_images(boxes, img, trim=False)
+    # region_images = np.array([region_images[i] for i in sort_indices])
+    region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
     
     if len(region_images) > 0:
         processed_images = preprocess_images(region_images, mode='rcn')
@@ -418,11 +408,6 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         right_most = max(red_blob[0] - mean_w / 2, 0.8 * origin_img.shape[1])
         left_most = min(mean_w / 2, min([x for x, y, w, h in boxes]) - mean_w / 4)
         width = right_most - left_most + 1
-        # keep = []
-        # for i, (x, y, w, h) in enumerate(boxes):
-        #     if (x + w / 2) < right_most:
-        #         keep.append(i)
-        # region_images = region_images[keep]
         
         prediction = [0, 0, 5, 5, 5]
         section_area = [0 for i in range(5)]
@@ -442,14 +427,14 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         prediction = ''.join([str(i) for i in prediction])
         
         if plot_debug:
-            display_img = origin_img.copy()
+            display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
             img_h, img_w = display_img.shape[:2]
             for i in range(0, 6):
                 x = int(left_most + width * i / 5)
                 cv2.line(display_img, (x, 0), (x, img_h), (255, 0, 0), 3)
             for i, (x, y, w, h) in enumerate(boxes):
                 # print(x,y,w,h)
-                display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
+                display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w]), cv2.COLOR_GRAY2BGR)
                 cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
                 cv2.putText(display_img, str(preds[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
             plt.subplot('414')
@@ -466,9 +451,9 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     
     print(label + ' => ' + prediction)
     
-    if plot_debug:
+    # if plot_debug:
         # cv2.imshow('', display_img)
-        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
+        # plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
         # plt.show()
     
 print(np.mean(loss))
