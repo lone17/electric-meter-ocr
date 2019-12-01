@@ -92,7 +92,7 @@ def sharpen(img):
     # applying the sharpening kernel to the input image & displaying it.
     sharpened = cv2.filter2D(img, -1, kernel_sharpening)
     
-    return img
+    return sharpened
 
 def white_balance(img):
     result = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)

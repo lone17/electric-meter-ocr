@@ -123,9 +123,9 @@ def merge_boxes(boxes, probs, iou_threshold=0.2):
         if h / w > 1.5:
             x -= 5
             w += 10
-        if h / w > 1.6:
-            y += 8
-            h -= 8
+        # if h / w > 1.6:
+        #     y += 8
+        #     h -= 8
         new_boxes[i] = x, y, w, h
     
     new_boxes = np.maximum(0, new_boxes)
@@ -139,24 +139,85 @@ def get_cropped_images(regions, image, target_size=(32, 32), trim=False, plot_de
         # print(x,y,w,h)
         # plt.subplot('131')
         # plt.imshow(np.sort(cropped_image, axis=1))
-        if h / w > 1.5 and trim:
-            if plot_debug:
-                plt.subplot('132')
-                plt.imshow(cropped_image)
-            trim_row = trim_row_index(cropped_image)
-            if trim_row < h / 4:
-                regions[i][1] += trim_row
-                cropped_image = cropped_image[trim_row:]
-                if plot_debug:
-                    plt.subplot('133')
-                    plt.title(trim_row)
-                    plt.imshow(cropped_image)
-            if plot_debug:
-                plt.show()
+        # if h / w > 1.5 and trim:
+        #     x, y, w, h = regions[i]
+        #     start_y = 0
+        #     end_y = h
+        #     trim_row = trim_row_index(cropped_image)
+        #     if trim_row < h / 4:
+        #         regions[i][1] += trim_row
+        #         regions[i][3] -= trim_row
+        #         cropped_image = cropped_image[trim_row:]
+        #     elif trim_row > 0.75 * h:
+        #         regions[i][3] = trim_row 
+        #         cropped_image = cropped_image[:trim_row]
+        # cropped_image = cv2.resize(cropped_image, target_size, interpolation=cv2.INTER_AREA)
+        # region_images.append(cropped_image)
+        if trim:
+            # plt.subplot('121')
+            # plt.imshow(cropped_image)
+            if h / w > 1.5:
+                cropped_image, new_box = trim_horizontally(cropped_image, regions[i])
+                regions[i] = np.array(new_box)
+                x, y, w, h = regions[i]
+                if h / w < 1.3:
+                    cropped_image, new_box = trim_vertically(cropped_image, regions[i])
+                    regions[i] = np.array(new_box)
+            # elif w / image.shape[0] > 0.3 or h / w < 1.3: 
+            #     cropped_image, new_box = trim_vertically(cropped_image, regions[i])
+            #     regions[i] = np.array(new_box)
+            #     x, y, w, h = regions[i]
+            #     if h / w > 1.5:
+            #         cropped_image, new_box = trim_horizontally(cropped_image, regions[i])
+            #         regions[i] = np.array(new_box)
+        
+            # plt.subplot('122')
+            # plt.imshow(cropped_image)
+            # plt.show()
         cropped_image = cv2.resize(cropped_image, target_size, interpolation=cv2.INTER_AREA)
         region_images.append(cropped_image)
     
     return np.array(region_images), regions
+
+def trim_horizontally(cropped_image, box):
+    x, y, w, h = box
+    start_y = 0
+    end_y = h
+    for _ in range(1):
+        trim_row = trim_row_index(cropped_image)
+        if trim_row + start_y < h / 4:
+            # if trim_row + start_y < h / 8:
+            #     continue
+            start_y += trim_row
+            cropped_image = cropped_image[trim_row:]
+        elif trim_row + start_y > 0.75 * h:
+            # if trim_row + start_y > 7/8 * h:
+            #     continue
+            end_y = start_y + trim_row
+            cropped_image = cropped_image[:trim_row]
+    
+    return cropped_image, [x, y + start_y, w, end_y - start_y]
+
+def trim_vertically(cropped_image, box):
+    x, y, w, h = box
+    start_x = 0
+    end_x = w
+    for _ in range(2):
+        trim_col = trim_col_index(cropped_image)
+        if trim_col + start_x < w / 4:
+            # if trim_col + start_x < w / 10:
+            #     print('not trim', trim_col + start_x, w / 10)
+            #     continue
+            # print('trim', trim_col)
+            start_x += trim_col
+            cropped_image = cropped_image[:, trim_col:]
+        elif trim_col + start_x > 3/4 * w:
+            # if trim_col + start_x > 9/10 * w:
+            #     continue
+            end_x = start_x + trim_col
+            cropped_image = cropped_image[:, :trim_col]
+    
+    return cropped_image, [x + start_x, y, end_x - start_x, h]
     
 def get_region_candidates(img):
     gray = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
@@ -203,7 +264,6 @@ def trim_row_index(image):
     start = 0
     cnt = 0
     longest = 0
-    # mean_row_mean = np.mean(row_mean)
     for i in range(len(row_mask) - 1):
         if not row_mask[i]:
             cnt += 1
@@ -215,6 +275,35 @@ def trim_row_index(image):
                 cnt = 0
     
     # print(start, longest, 'asdad')
+    return start + longest // 2
+
+def trim_col_index(image):
+    # if len(image.shape) > 2:
+    #     image = convert_to_gray(image)[:,:,0]
+    image = global_hist_equalize(image)
+    
+    h, w = image.shape[:2]
+    col_mean = np.sort(image, axis=0)[-h//6:].mean(axis=0) 
+    
+    col_mask = col_mean > np.mean(col_mean)
+    start = 0
+    cnt = 0
+    longest = 0
+    for i in range(len(col_mask) - 1):
+        if not col_mask[i]:
+            cnt += 1
+        elif col_mask[i]:
+            if cnt > 0:
+                if cnt > longest:
+                    longest = cnt
+                    start = i - cnt
+                cnt = 0
+    
+    # display_img = np.sort(image, axis=0)
+    # print(start, longest, 'asdad')
+    # cv2.line(display_img, (start + longest // 2, 0), (start + longest // 2, h), (255, 255, 255), 1)
+    # plt.imshow(display_img)
+    # plt.show()
     return start + longest // 2
 
 def filt_boxes(boxes, image):
@@ -241,7 +330,7 @@ def filt_boxes(boxes, image):
 
 def get_rotate_angle(img, max_degree=10, plot_debug=False):
     img = bilateral_blur(img.copy(), 9, 50, 50)
-    img = sharpen(img)
+    # img = sharpen(img)
     # plt.imshow(img)
     # plt.show()
     gray_img = clahe(img, clipLimit=2.0, tileGridSize=(21, 31))
@@ -298,7 +387,7 @@ def get_red_blob_bounding_box(img, plot_debug=False):
     tmp[:int(0.1 * tmp.shape[0]), :] = 0
     tmp[-int(0.1 * tmp.shape[0]):, :] = 0
     
-    _, contours, _ = cv2.findContours(tmp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(tmp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2:]
     blob = max(contours, key=lambda el: cv2.contourArea(el))
     poly = cv2.approxPolyDP(blob, 3, True)
     x, y, w, h = cv2.boundingRect(poly)
@@ -358,12 +447,12 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     probs = clf_model.predict_proba(processed_images, verbose=0)[:, 1]
     
     for i, (_, _, w, h) in enumerate(boxes):
-        # if h / w > 1.6 and h / w < 1.7:
-        #     probs[i] += 0.1
+        if h / w > 1.6 and h / w < 1.7:
+            probs[i] += 0.1
         if h / w >= 1.75:
             probs[i] -= 0.1
 
-    mask = probs > 0.5
+    mask = probs > 0.4
     boxes = boxes[mask]
     region_images = region_images[mask]
     probs = probs[mask]
@@ -372,27 +461,24 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
         for i, (x, y, w, h) in enumerate(boxes):
             display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
+        for i, (x, y, w, h) in enumerate(boxes):
             cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
             cv2.putText(display_img, str(probs[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
         plt.subplot('413')
         plt.imshow(display_img)
 
+    boxes, probs = merge_boxes(boxes, probs)
     # boxes, probs = merge_boxes(boxes, probs)
-    # # boxes, probs = merge_boxes(boxes, probs)
-    # # print(boxes)
-    # sort_indices = np.argsort(boxes[:, 0])
-    # boxes = np.array([boxes[i] for i in sort_indices])
-    # # print(boxes)
-    # region_images, regions = get_cropped_images(boxes, img, trim=True)
     
-    indices = non_max_suppression(boxes, probs, 0.1)
-    boxes = boxes[indices]
-    region_images = region_images[indices]
-    # boxes = filt_boxes(boxes, img)
+    # indices = non_max_suppression(boxes, probs, 0.1)
+    # boxes = boxes[indices]
+    # region_images = region_images[indices]
+    
     sort_indices = np.argsort(boxes[:, 0])
     boxes = np.array([boxes[i] for i in sort_indices])
-    # region_images = np.array([region_images[i] for i in sort_indices])
-    region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
+    
+    region_images, regions = get_cropped_images(boxes, img, trim=True)
+    # region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
     
     if len(region_images) > 0:
         processed_images = preprocess_images(region_images, mode='rcn')
@@ -406,7 +492,8 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         red_blob = get_red_blob_bounding_box(origin_img.copy())
         mean_w = np.mean([w for x, y, w, h in boxes])
         right_most = max(red_blob[0] - mean_w / 2, 0.8 * origin_img.shape[1])
-        left_most = min(mean_w / 2, min([x for x, y, w, h in boxes]) - mean_w / 4)
+        left_most = min(mean_w / 3, min([x for x, y, w, h in boxes]) - mean_w / 4)
+        left_most = max(left_most, 0)
         width = right_most - left_most + 1
         
         prediction = [0, 0, 5, 5, 5]
@@ -418,11 +505,14 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
             if w * h > section_area[section_idx]:
                 prediction[section_idx] = preds[i]
                 section_area[section_idx] = w * h
+                if section_idx in [0, 1]:
+                    if preds[i] != 0:
+                        print(preds[i], probs[i][preds[i]], 0, probs[i][0])
         
-        if prediction[0] in [6, 8, 9]:
-            prediction[0] = 0
-        if prediction[1] in [6, 8, 9]:
-            prediction[1] = 0
+        # if prediction[0] in [6, 8, 9]:
+        #     prediction[0] = 0
+        # if prediction[1] in [6, 8, 9]:
+        #     prediction[1] = 0
             
         prediction = ''.join([str(i) for i in prediction])
         
@@ -435,6 +525,7 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
             for i, (x, y, w, h) in enumerate(boxes):
                 # print(x,y,w,h)
                 display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w]), cv2.COLOR_GRAY2BGR)
+            for i, (x, y, w, h) in enumerate(boxes):
                 cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
                 cv2.putText(display_img, str(preds[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
             plt.subplot('414')
@@ -454,7 +545,7 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     
     if plot_debug:
         # cv2.imshow('', display_img)
-        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '.'))
+        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
         # plt.show()
     
 print(np.mean(loss))
