@@ -154,9 +154,9 @@ def get_cropped_images(regions, image, target_size=(32, 32), trim=False, plot_de
                 cropped_image, new_box = trim_horizontally(cropped_image, regions[i])
                 regions[i] = np.array(new_box)
                 x, y, w, h = regions[i]
-                if h / w < 1.3:
-                    cropped_image, new_box = trim_vertically(cropped_image, regions[i])
-                    regions[i] = np.array(new_box)
+                # if h / w < 1.3:
+                #     cropped_image, new_box = trim_vertically(cropped_image, regions[i])
+                #     regions[i] = np.array(new_box)
             # elif w / image.shape[0] > 0.3 or h / w < 1.3: 
             #     cropped_image, new_box = trim_vertically(cropped_image, regions[i])
             #     regions[i] = np.array(new_box)
@@ -451,16 +451,16 @@ def read_cropped_image(origin_img, rcn_model, clf_model):
                 prediction[section_idx] = preds[i]
                 section_area[section_idx] = w * h
         
-        # if prediction[0] in [6, 8, 9]:
-        #     prediction[0] = 0
-        # if prediction[1] in [6, 8, 9]:
-        #     prediction[1] = 0
+        if prediction[0] in [6, 8, 9]:
+            prediction[0] = 0
+        if prediction[1] in [6, 8, 9]:
+            prediction[1] = 0
             
         prediction = ''.join([str(i) for i in prediction])
     else:
         prediction = '00555'
     
-    return int(prediction)
+    return prediction, boxes
 
 if __name__ == '__main__':
     from imutils import paths
@@ -478,14 +478,15 @@ if __name__ == '__main__':
     plt.rcParams["figure.figsize"] = [9, 9]
     loss, acc = [], []
     plot_debug = True
-    # for img_path in list(paths.list_images(r'D:\Google Drive\image processing\image_cropped'))[:]:
-    #     origin_img = cv2.imread(img_path) 
-    #     # origin_img = resize_to_prefered_height(origin_img, prefered_height=240)
-    #     label = '00000'
-    from load_data import test_data
-    file_list = os.listdir(r'D:\Google Drive\image processing\image_cropped')
-    for img_idx, (origin_img, label) in enumerate(test_data[:]):
-        label = ''.join(label)[:5]
+    for img_path in list(paths.list_images(r'D:\Google Drive\image processing\task2_cropped'))[:]:
+        print(img_path)
+        origin_img = cv2.imread(img_path) 
+        # origin_img = resize_to_prefered_height(origin_img, prefered_height=240)
+        label = '00000'
+    # from load_data import test_data
+    # file_list = os.listdir(r'D:\Google Drive\image processing\image_cropped')
+    # for img_idx, (origin_img, label) in enumerate(test_data[:]):
+    #     label = ''.join(label)[:5]
 
         img = origin_img.copy()
 
@@ -614,8 +615,18 @@ if __name__ == '__main__':
         
         if plot_debug:
             # cv2.imshow('', display_img)
-            plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
-            # plt.show()
+            # plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
+            plt.show()
+        
+        min_x = min([box[0] for box in boxes])
+        mean_w = int(np.mean([box[2] for box in boxes]))
+        start_x = min(max(0, min_x - mean_w // 3), 
+                      max(0, int(origin_img.shape[1] - 8 * mean_w)))
+        print(start_x)
+        # display_img = origin_img[:, start_x:]
+        # plt.imshow(display_img)
+        # plt.show()
+        # cv2.imwrite(img_path, display_img)
         
     print(np.mean(loss))
     print(np.mean(acc))

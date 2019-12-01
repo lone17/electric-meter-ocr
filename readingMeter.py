@@ -1,3 +1,10 @@
+'''
+Vu Minh Hieu - 16022405
+Nguyen Thanh Tung - 16020063
+Vo Le Minh Tam - 16020279
+Nguyen Thi Linh - 16022409
+'''
+
 import numpy as np
 import scipy
 import cv2
@@ -10,6 +17,7 @@ import skimage
 
 from keras.models import load_model
 from task1 import *
+from task2 import crop
 
 class Reader:
 
@@ -28,20 +36,38 @@ class Reader:
     # Implement the reading process here
     def process(self, img):
         try:
-            prediction = read_cropped_image(img, self.rcn_model, self.clf_model)
+            prediction, boxes = read_cropped_image(img, self.rcn_model, self.clf_model)
         except Exception as e:
-            raise e
-            prediction = 5000
+            import traceback
+            traceback.print_exc()
+            prediction = '251'
             
-        return prediction
+        return int(prediction)
 
     # Prepare your models
     def prepare_crop(self):
-        print("\tInit your models here")
+        self.prepare()
 
     # Implement the reading process here
     def crop_and_process(self, img):
-        return 5000
+        try:
+            x, y, w, h = crop(img)
+            cropped_image = cropped_image = img[y:y+h, x:x+w]
+            _, boxes = read_cropped_image(cropped_image, self.rcn_model, self.clf_model)
+            
+            min_x = min([box[0] for box in boxes])
+            mean_w = int(np.mean([box[2] for box in boxes]))
+            start_x = min(max(0, min_x - mean_w // 3), 
+                          max(0, int(w - 8 * mean_w)))
+            
+            cropped_image = cropped_image[:, start_x:]
+            prediction, boxes = read_cropped_image(cropped_image, self.rcn_model, self.clf_model)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            prediction = '251'
+        
+        return int(prediction)
 
 
 def check_import():
