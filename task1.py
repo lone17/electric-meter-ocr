@@ -2,15 +2,9 @@ import os
 
 import cv2
 import numpy as np
-import imutils
-from imutils import paths
-from keras.models import load_model
-from matplotlib import pyplot as plt
 
 from utils import *
 from processing import *
-from models import get_classifier_model
-from Levenshtein import distance
 
 def non_max_suppression(boxes, probs, overlap_threshold=0.3):
         if len(boxes) == 0:
@@ -364,7 +358,7 @@ def get_rotate_angle(img, max_degree=10, plot_debug=False):
         plt.subplot('312')
         plt.imshow(display_img)
         print(rotate_angle)
-        display_img = imutils.rotate(display_img, rotate_angle)
+        display_img = rotate(display_img, rotate_angle)
         plt.subplot('313')
         plt.imshow(display_img)
         plt.show()
@@ -399,48 +393,18 @@ def get_red_blob_bounding_box(img, plot_debug=False):
     
     return (x, y, w, h)
 
-clf_model = get_classifier_model(num_classes=2, num_filters=32, dense_unit=1024)
-clf_model.load_weights('clf_weights.h5')
-# clf_model.load_weights('classifier_weights_32_512.h5')
-
-rcn_model = get_classifier_model(num_classes=10, num_filters=32, dense_unit=512)
-rcn_model.load_weights('recognizer_weights_32_512.h5')
-
-plt.rcParams["figure.figsize"] = [9, 9]
-loss, acc = [], []
-plot_debug = True
-# for img_path in list(paths.list_images(r'D:\Google Drive\image processing\image_cropped'))[:]:
-#     origin_img = cv2.imread(img_path) 
-#     # origin_img = resize_to_prefered_height(origin_img, prefered_height=240)
-#     label = '00000'
-from load_data import test_data
-file_list = os.listdir(r'D:\Google Drive\image processing\image_cropped')
-for img_idx, (origin_img, label) in enumerate(test_data[:]):
-    label = ''.join(label)[:5]
-
+def read_cropped_image(origin_img, rcn_model, clf_model):
     img = origin_img.copy()
 
     rotate_angle = get_rotate_angle(img, max_degree=10)
     
-    # img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
-    img = imutils.rotate(img, rotate_angle)
-    origin_img = imutils.rotate(origin_img, rotate_angle)
-    # img = img[:, :int(0.8 * img.shape[1])]
-    # origin_img = origin_img[:, :int(0.8 * origin_img.shape[1])]
+    img = rotate(img, rotate_angle)
+    origin_img = rotate(origin_img, rotate_angle)
     
     processed_img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
     boxes = get_region_candidates(processed_img)
     boxes = filt_boxes(boxes, img)
 
-    if plot_debug:
-        display_img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
-        for x, y, w, h in boxes:
-            cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-        plt.subplot('412')
-        plt.imshow(display_img)
-
-    # print(img.shape)
-    # print(global_hist_equalize(img).shape)
     region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
 
     processed_images = preprocess_images(region_images, mode='clf')
@@ -456,36 +420,17 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
     boxes = boxes[mask]
     region_images = region_images[mask]
     probs = probs[mask]
-    
-    if plot_debug:
-        display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
-        for i, (x, y, w, h) in enumerate(boxes):
-            display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
-        for i, (x, y, w, h) in enumerate(boxes):
-            cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-            cv2.putText(display_img, str(probs[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
-        plt.subplot('413')
-        plt.imshow(display_img)
 
     boxes, probs = merge_boxes(boxes, probs)
-    # boxes, probs = merge_boxes(boxes, probs)
-    
-    # indices = non_max_suppression(boxes, probs, 0.1)
-    # boxes = boxes[indices]
-    # region_images = region_images[indices]
     
     sort_indices = np.argsort(boxes[:, 0])
     boxes = np.array([boxes[i] for i in sort_indices])
     
     region_images, regions = get_cropped_images(boxes, img, trim=True)
-    # region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
     
     if len(region_images) > 0:
         processed_images = preprocess_images(region_images, mode='rcn')
-        # for i, image in enumerate(processed_images):
-        #     plt.subplot(1, len(processed_images), i+1)
-        #     plt.imshow(np.sort(image[:,:,0], axis=1))
-        # plt.show()
+        
         probs = rcn_model.predict_proba(processed_images)
         preds = probs.argmax(axis=-1)
 
@@ -505,9 +450,6 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
             if w * h > section_area[section_idx]:
                 prediction[section_idx] = preds[i]
                 section_area[section_idx] = w * h
-                if section_idx in [0, 1]:
-                    if preds[i] != 0:
-                        print(preds[i], probs[i][preds[i]], 0, probs[i][0])
         
         # if prediction[0] in [6, 8, 9]:
         #     prediction[0] = 0
@@ -515,38 +457,165 @@ for img_idx, (origin_img, label) in enumerate(test_data[:]):
         #     prediction[1] = 0
             
         prediction = ''.join([str(i) for i in prediction])
-        
-        if plot_debug:
-            display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
-            img_h, img_w = display_img.shape[:2]
-            for i in range(0, 6):
-                x = int(left_most + width * i / 5)
-                cv2.line(display_img, (x, 0), (x, img_h), (255, 0, 0), 3)
-            for i, (x, y, w, h) in enumerate(boxes):
-                # print(x,y,w,h)
-                display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w]), cv2.COLOR_GRAY2BGR)
-            for i, (x, y, w, h) in enumerate(boxes):
-                cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
-                cv2.putText(display_img, str(preds[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
-            plt.subplot('414')
-            plt.imshow(display_img)
-        
-        if plot_debug:
-            plt.subplot('411')
-            plt.imshow(origin_img)
-            plt.title(label + ' => ' + prediction)
     else:
         prediction = '00555'
     
-    loss.append(distance(prediction, label) / max(len(prediction), len(label)))
-    acc.append(prediction == label)
+    return int(prediction)
+
+if __name__ == '__main__':
+    from imutils import paths
+    from Levenshtein import distance
+    from keras.models import load_model
+    from matplotlib import pyplot as plt
     
-    print(label + ' => ' + prediction)
-    
-    if plot_debug:
-        # cv2.imshow('', display_img)
-        plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
-        # plt.show()
-    
-print(np.mean(loss))
-print(np.mean(acc))
+    clf_model = get_classifier_model(num_classes=2, num_filters=32, dense_unit=1024)
+    clf_model.load_weights('clf_weights.h5')
+    # clf_model.load_weights('classifier_weights_32_512.h5')
+
+    rcn_model = get_classifier_model(num_classes=10, num_filters=32, dense_unit=512)
+    rcn_model.load_weights('recognizer_weights_32_512.h5')
+
+    plt.rcParams["figure.figsize"] = [9, 9]
+    loss, acc = [], []
+    plot_debug = True
+    # for img_path in list(paths.list_images(r'D:\Google Drive\image processing\image_cropped'))[:]:
+    #     origin_img = cv2.imread(img_path) 
+    #     # origin_img = resize_to_prefered_height(origin_img, prefered_height=240)
+    #     label = '00000'
+    from load_data import test_data
+    file_list = os.listdir(r'D:\Google Drive\image processing\image_cropped')
+    for img_idx, (origin_img, label) in enumerate(test_data[:]):
+        label = ''.join(label)[:5]
+
+        img = origin_img.copy()
+
+        rotate_angle = get_rotate_angle(img, max_degree=10)
+        
+        # img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
+        img = rotate(img, rotate_angle)
+        origin_img = rotate(origin_img, rotate_angle)
+        # img = img[:, :int(0.8 * img.shape[1])]
+        # origin_img = origin_img[:, :int(0.8 * origin_img.shape[1])]
+        
+        processed_img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
+        boxes = get_region_candidates(processed_img)
+        boxes = filt_boxes(boxes, img)
+
+        if plot_debug:
+            display_img = clahe(img, clipLimit=3.0, tileGridSize=(10, 17))
+            for x, y, w, h in boxes:
+                cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
+            plt.subplot('412')
+            plt.imshow(display_img)
+
+        # print(img.shape)
+        # print(global_hist_equalize(img).shape)
+        region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
+
+        processed_images = preprocess_images(region_images, mode='clf')
+        probs = clf_model.predict_proba(processed_images, verbose=0)[:, 1]
+        
+        for i, (_, _, w, h) in enumerate(boxes):
+            if h / w > 1.6 and h / w < 1.7:
+                probs[i] += 0.1
+            if h / w >= 1.75:
+                probs[i] -= 0.1
+
+        mask = probs > 0.4
+        boxes = boxes[mask]
+        region_images = region_images[mask]
+        probs = probs[mask]
+        
+        if plot_debug:
+            display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
+            for i, (x, y, w, h) in enumerate(boxes):
+                display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w])[:,:,0], cv2.COLOR_GRAY2BGR)
+            for i, (x, y, w, h) in enumerate(boxes):
+                cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
+                cv2.putText(display_img, str(probs[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
+            plt.subplot('413')
+            plt.imshow(display_img)
+
+        boxes, probs = merge_boxes(boxes, probs)
+        # boxes, probs = merge_boxes(boxes, probs)
+        
+        # indices = non_max_suppression(boxes, probs, 0.1)
+        # boxes = boxes[indices]
+        # region_images = region_images[indices]
+        
+        sort_indices = np.argsort(boxes[:, 0])
+        boxes = np.array([boxes[i] for i in sort_indices])
+        
+        region_images, regions = get_cropped_images(boxes, img, trim=True)
+        # region_images, regions = get_cropped_images(boxes, bilateral_blur(img, 9, 50, 50), trim=False)
+        
+        if len(region_images) > 0:
+            processed_images = preprocess_images(region_images, mode='rcn')
+            # for i, image in enumerate(processed_images):
+            #     plt.subplot(1, len(processed_images), i+1)
+            #     plt.imshow(np.sort(image[:,:,0], axis=1))
+            # plt.show()
+            probs = rcn_model.predict_proba(processed_images)
+            preds = probs.argmax(axis=-1)
+
+            red_blob = get_red_blob_bounding_box(origin_img.copy())
+            mean_w = np.mean([w for x, y, w, h in boxes])
+            right_most = max(red_blob[0] - mean_w / 2, 0.8 * origin_img.shape[1])
+            left_most = min(mean_w / 3, min([x for x, y, w, h in boxes]) - mean_w / 4)
+            left_most = max(left_most, 0)
+            width = right_most - left_most + 1
+            
+            prediction = [0, 0, 5, 5, 5]
+            section_area = [0 for i in range(5)]
+            for i, (x, y, w, h) in enumerate(boxes):
+                section_idx = int((x + w / 2 - left_most) / (width / 5))
+                if section_idx > 4:
+                    continue
+                if w * h > section_area[section_idx]:
+                    prediction[section_idx] = preds[i]
+                    section_area[section_idx] = w * h
+                    if section_idx in [0, 1]:
+                        if preds[i] != 0:
+                            print(preds[i], probs[i][preds[i]], 0, probs[i][0])
+            
+            # if prediction[0] in [6, 8, 9]:
+            #     prediction[0] = 0
+            # if prediction[1] in [6, 8, 9]:
+            #     prediction[1] = 0
+                
+            prediction = ''.join([str(i) for i in prediction])
+            
+            if plot_debug:
+                display_img = bilateral_blur(origin_img.copy(), 9, 50, 50)
+                img_h, img_w = display_img.shape[:2]
+                for i in range(0, 6):
+                    x = int(left_most + width * i / 5)
+                    cv2.line(display_img, (x, 0), (x, img_h), (255, 0, 0), 3)
+                for i, (x, y, w, h) in enumerate(boxes):
+                    # print(x,y,w,h)
+                    display_img[y:y+h, x:x+w] = cv2.cvtColor(convert_to_gray(display_img[y:y+h, x:x+w]), cv2.COLOR_GRAY2BGR)
+                for i, (x, y, w, h) in enumerate(boxes):
+                    cv2.rectangle(display_img, (x, y), (x + w, y + h), (0, 0, 255), 3)
+                    cv2.putText(display_img, str(preds[i]), (x+5, y+30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), thickness=3)
+                plt.subplot('414')
+                plt.imshow(display_img)
+            
+            if plot_debug:
+                plt.subplot('411')
+                plt.imshow(origin_img)
+                plt.title(label + ' => ' + prediction)
+        else:
+            prediction = '00555'
+        
+        loss.append(distance(prediction, label) / max(len(prediction), len(label)))
+        acc.append(prediction == label)
+        
+        print(label + ' => ' + prediction)
+        
+        if plot_debug:
+            # cv2.imshow('', display_img)
+            plt.savefig('debug_images/' + file_list[img_idx].replace('.', '().'))
+            # plt.show()
+        
+    print(np.mean(loss))
+    print(np.mean(acc))

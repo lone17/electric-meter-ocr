@@ -126,40 +126,5 @@ def model0(img_h, training=True):
 
     return model
 
-def get_classifier_model(input_size=32, num_classes=2, num_filters=32, dense_unit=512):
-    pool_size = (2, 2)
-    kernel_size = (3, 3) 
-    input_shape = (input_size, input_size, 1)
-    
-    model = Sequential()
-    model.add(Convolution2D(num_filters, kernel_size, activation='relu',
-                            input_shape=input_shape))
-    model.add(Convolution2D(num_filters, kernel_size, activation='relu'))
-    model.add(MaxPooling2D(pool_size))
-    # (16, 8, 32)
-     
-    model.add(Convolution2D(num_filters*2, kernel_size, activation='relu'))
-    model.add(Convolution2D(num_filters*2, kernel_size, activation='relu'))
-    model.add(MaxPooling2D(pool_size))
-    # (8, 4, 64) = (2048)
-        
-    model.add(Flatten())
-    model.add(Dense(dense_unit, activation='relu'))
-    model.add(Dropout(0.5))
-    
-    if True:
-        model.add(Dense(num_classes, activation='softmax'))
-        model.compile(loss='categorical_crossentropy',
-                      optimizer='adadelta',
-                      metrics=['accuracy'])
-    else:
-        model.add(Dense(num_classes, activation='sigmoid'))
-        model.compile(loss='binary_crossentropy',
-        optimizer='adadelta',
-        metrics=['accuracy'])
-    
-    return model
-
 if __name__ == '__main__':
-    model = get_classifier_model(num_classes=2)
-    print(model.summary())
+    pass
